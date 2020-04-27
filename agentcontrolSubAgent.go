@@ -268,6 +268,7 @@ func (t *SubAgent) serveGetNextRequest(i *gosnmp.SnmpPacket) (*gosnmp.SnmpPacket
 	queryForOidStriped := strings.TrimLeft(queryForOid, ".0")
 	t.Logger.Debugf("serveGetNextRequest of %v", queryForOid)
 	item, id := t.getForPDUValueControl(queryForOidStriped)
+	t.Logger.Debugf("serveGetNextRequest of %v", queryForOidStriped)
 	t.Logger.Debugf("t.getForPDUValueControl. query_for_oid=%v item=%v id=%v", queryForOid, item, id)
 	if item != nil {
 		id += 1
@@ -379,14 +380,11 @@ func (t *SubAgent) serveSetRequest(i *gosnmp.SnmpPacket) (*gosnmp.SnmpPacket, er
 }
 
 func (t *SubAgent) getForPDUValueControl(oid string) (*PDUValueControlItem, int) {
-	toQuery := oidToByteString(oid)
 	i := sort.Search(len(t.OIDs), func(i int) bool {
-		thisOid := oidToByteString(t.OIDs[i].OID)
-		return thisOid >= toQuery
+		return oidCompare(t.OIDs[i].OID, oid)
 	})
 	if i < len(t.OIDs) {
-		thisOid := oidToByteString(t.OIDs[i].OID)
-		if thisOid == toQuery {
+		if oid == t.OIDs[i].OID {
 			return t.OIDs[i], i
 		}
 	}

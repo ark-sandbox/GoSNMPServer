@@ -42,6 +42,30 @@ func oidToByteString(oid string) string {
 	return string(out)
 }
 
+func oidCompare(oidx string, oidy string) bool {
+	xi := strings.Split(oidx, ".")
+	yi := strings.Split(oidy, ".")
+	for id, each := range xi {
+		i, err := strconv.ParseInt(each, 10, 32)
+		if err != nil {
+			panic(err)
+		}
+		if len(yi) <= id {
+			return true
+		}
+		j, err := strconv.ParseInt(yi[id], 10, 32)
+		if err != nil {
+			panic(err)
+		}
+		if i > j {
+			return true
+		} else if i < j {
+			return false
+		}
+	}
+	return true
+}
+
 // IsValidObjectIdentifier will check a oid string is valid oid
 func IsValidObjectIdentifier(oid string) (result bool) {
 	defer func() {

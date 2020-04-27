@@ -11,6 +11,9 @@ import "github.com/slayercat/GoSNMPServer/mibImps"
 import "fmt"
 import "strconv"
 import "net"
+import "compress/bzip2"
+import "encoding/hex"
+import "bufio"
 
 import "github.com/urfave/cli/v2"
 
@@ -39,7 +42,139 @@ func makeApp() *cli.App {
 	}
 }
 
-func LoadOids(fname string) {
+func LoadSNMPRec(fname string) {
+	f, err := os.OpenFile(fname, 0, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	// create a reader
+	br := bufio.NewReader(f)
+	// create a bzip2.reader, using the reader we just created
+	cr := bzip2.NewReader(br)
+	data, err := ioutil.ReadAll(cr)
+	if err != nil {
+		panic(err)
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		items := strings.Split(line, "|")
+		if len(items) < 3 {
+			continue
+		}
+		oid := items[0]
+		valType := items[1]
+		val := items[2]
+		if strings.Contains(valType, "x") || strings.Contains(valType, "X") {
+			if valType != "64x" && valType != "64X" {
+				dVal, err := hex.DecodeString(val)
+				if err != nil {
+					panic(err)
+				}
+				val = string(dVal)
+			}
+		}
+
+		switch {
+		case valType == "2":
+			valI, _ := strconv.Atoi(val)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.Integer,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1IntegerWrap(valI), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+
+		case valType == "65":
+			valI, _ := strconv.Atoi(val)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.Counter32,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1Counter32Wrap(uint(valI)), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		case valType == "70":
+			valI, _ := strconv.Atoi(val)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.Counter64,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1Counter64Wrap(uint64(valI)), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		case valType == "66":
+			valI, _ := strconv.Atoi(val)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.Gauge32,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1Gauge32Wrap(uint(valI)), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		case valType == "64x":
+			bytes, _ := hex.DecodeString(val)
+			if len(bytes) == 4 {
+				bytes = append(make([]byte, 12), bytes...)
+			}
+			fmt.Println("IP: bytes length -> ", len(bytes))
+			ip := net.IP(bytes)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.IPAddress,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1IPAddressWrap(ip), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		case valType == "6":
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.ObjectIdentifier,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1ObjectIdentifierWrap(val), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+
+		case valType == "4" || valType == "4x":
+			val = strings.Replace(val, `"`, "", -1)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.OctetString,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1ObjectIdentifierWrap(val), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		case valType == "67":
+			valI, _ := strconv.Atoi(val)
+			pdu := GoSNMPServer.PDUValueControlItem{
+				OID:  oid,
+				Type: gosnmp.TimeTicks,
+				OnGet: func() (value interface{}, err error) {
+					return GoSNMPServer.Asn1TimeTicksWrap(uint32(valI)), nil
+				},
+				Document: "....",
+			}
+			mimicMibs = append(mimicMibs, &pdu)
+		}
+	}
+}
+
+func LoadSNMPWalk(fname string) {
 	data, err := ioutil.ReadFile(fname)
 	if err != nil {
 		panic(err)
@@ -168,6 +303,14 @@ func LoadOids(fname string) {
 	}
 }
 
+func LoadOids(fname string) {
+	if strings.Contains(fname, ".bz2") {
+		LoadSNMPRec(fname)
+	} else {
+		LoadSNMPWalk(fname)
+	}
+}
+
 func main() {
 	app := makeApp()
 	app.Run(os.Args)
@@ -209,6 +352,10 @@ func runServer(c *cli.Context) error {
 				OIDs:         mimicMibs,
 			},
 		},
+	}
+	syncErr := master.SyncConfig()
+	if syncErr != nil {
+		panic(syncErr)
 	}
 	logger.Infof("V3 Users:")
 	for _, val := range master.SecurityConfig.Users {
