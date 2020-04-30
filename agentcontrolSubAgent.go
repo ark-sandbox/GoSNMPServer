@@ -201,7 +201,8 @@ func (t *SubAgent) serveGetRequest(i *gosnmp.SnmpPacket) (*gosnmp.SnmpPacket, er
 		return &ret, nil
 	}
 	for id, varItem := range i.Variables {
-		item, _ := t.getForPDUValueControl(varItem.Name)
+		queryForOidStriped := strings.TrimLeft(varItem.Name, ".0")
+		item, _ := t.getForPDUValueControl(queryForOidStriped)
 		if item == nil {
 			if ret.Error == gosnmp.NoError {
 				ret.Error = gosnmp.NoSuchName
