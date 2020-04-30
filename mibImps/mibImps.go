@@ -5,6 +5,7 @@ import "github.com/slayercat/GoSNMPServer"
 import "github.com/slayercat/GoSNMPServer/mibImps/dismanEventMib"
 import "github.com/slayercat/GoSNMPServer/mibImps/ifMib"
 import "github.com/slayercat/GoSNMPServer/mibImps/ucdMib"
+import "github.com/slayercat/GoSNMPServer/mibImps/customMib"
 
 func init() {
 	g_Logger = GoSNMPServer.NewDiscardLogger()
@@ -27,5 +28,6 @@ func All() []*GoSNMPServer.PDUValueControlItem {
 	toRet = append(toRet, dismanEventMib.All()...)
 	toRet = append(toRet, ifMib.All()...)
 	toRet = append(toRet, ucdMib.All()...)
+	toRet = append(toRet, customMib.All()...)
 	return toRet
 }
